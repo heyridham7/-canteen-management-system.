@@ -5,6 +5,13 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/context/AuthContext";
 import { MenuItem, Order } from "@/types";
 import {
+  demoGetMenu,
+  demoGetOrders,
+  demoCreateOrder,
+  demoUpdateOrderStatus,
+  demoTopUpWallet,
+} from "@/lib/demoStorage";
+import {
   Ticket,
   Clock,
   Wallet,
@@ -70,13 +77,10 @@ export default function StudentDashboardPage() {
   const walletBalance = user?.walletBalance ?? 450;
 
   // 1. Fetch menu items
-  const fetchMenu = useCallback(async () => {
+  const fetchMenu = useCallback(() => {
     try {
-      const res = await fetch("/api/menu");
-      const data = await res.json();
-      if (data.success && Array.isArray(data.items)) {
-        setMenuItems(data.items);
-      }
+      const res = demoGetMenu();
+      setMenuItems(res.items);
     } catch (err) {
       console.error("Failed to load menu:", err);
     } finally {
@@ -85,27 +89,24 @@ export default function StudentDashboardPage() {
   }, []);
 
   // 2. Fetch student orders
-  const fetchOrders = useCallback(async () => {
+  const fetchOrders = useCallback(() => {
     if (!studentId) return;
     try {
-      const res = await fetch(`/api/orders?studentId=${encodeURIComponent(studentId)}`);
-      const data = await res.json();
-      if (data.success && Array.isArray(data.orders)) {
-        setOrders(data.orders);
+      const studentOrders = demoGetOrders(studentId);
+      setOrders(studentOrders);
 
-        // Find most recent active order
-        const active = data.orders.find(
-          (o: Order) =>
-            o.status === "pending" ||
-            o.status === "accepted" ||
-            o.status === "preparing" ||
-            o.status === "ready"
-        );
-        if (active) {
-          setLatestOrder(active);
-        } else if (data.orders.length > 0 && !latestOrder) {
-          setLatestOrder(data.orders[0]);
-        }
+      // Find most recent active order
+      const active = studentOrders.find(
+        (o: Order) =>
+          o.status === "pending" ||
+          o.status === "accepted" ||
+          o.status === "preparing" ||
+          o.status === "ready"
+      );
+      if (active) {
+        setLatestOrder(active);
+      } else if (studentOrders.length > 0 && !latestOrder) {
+        setLatestOrder(studentOrders[0]);
       }
     } catch (err) {
       console.error("Failed to load orders:", err);
@@ -118,12 +119,21 @@ export default function StudentDashboardPage() {
     fetchMenu();
     fetchOrders();
 
-    // Polling every 4s to track live status changes from kitchen staff
-    const interval = setInterval(() => {
+    const handleSync = () => {
+      fetchMenu();
       fetchOrders();
-    }, 4000);
+    };
 
-    return () => clearInterval(interval);
+    window.addEventListener("campusbite_demo_sync", handleSync);
+    window.addEventListener("storage", handleSync);
+
+    const interval = setInterval(fetchOrders, 3000);
+
+    return () => {
+      window.removeEventListener("campusbite_demo_sync", handleSync);
+      window.removeEventListener("storage", handleSync);
+      clearInterval(interval);
+    };
   }, [fetchMenu, fetchOrders]);
 
   // Cart operations
@@ -174,7 +184,7 @@ export default function StudentDashboardPage() {
   const totalAmount = subtotal - subsidyDiscount;
 
   // Handle Checkout
-  const handlePlaceOrder = async () => {
+  const handlePlaceOrder = () => {
     if (cart.length === 0) return;
     setOrderError(null);
 
@@ -187,85 +197,71 @@ export default function StudentDashboardPage() {
 
     setIsPlacingOrder(true);
     try {
-      const res = await fetch("/api/orders", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          studentId,
-          studentName: user?.name || "Student",
-          studentEmail,
-          department: user?.department || "Engineering",
-          items: cart,
-          paymentMethod,
-        }),
+      const res = demoCreateOrder({
+        studentId,
+        studentName: user?.name || "Student",
+        studentEmail,
+        department: user?.department || "Engineering",
+        items: cart,
+        paymentMethod,
       });
 
-      const data = await res.json();
-      if (data.success && data.order) {
-        setLatestOrder(data.order);
+      if (res.success && res.order) {
+        setLatestOrder(res.order);
         setCart([]);
         setActiveTab("tokens");
-        await refreshUser();
-        await fetchOrders();
+        refreshUser();
+        fetchOrders();
       } else {
-        setOrderError(data.message || "Failed to place order.");
+        setOrderError(res.message || "Failed to place order.");
       }
     } catch (err) {
       console.error("Order submit error:", err);
-      setOrderError("Network error while submitting order.");
+      setOrderError("Error while placing order.");
     } finally {
       setIsPlacingOrder(false);
     }
   };
 
   // Handle Order Cancellation
-  const handleCancelOrder = async (orderId: string) => {
+  const handleCancelOrder = (orderId: string) => {
     if (!confirm("Are you sure you want to cancel this order? If paid via student wallet, the amount will be refunded immediately.")) {
       return;
     }
 
     setCancellingOrderId(orderId);
     try {
-      const res = await fetch(`/api/orders/${orderId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          nextStatus: "cancelled",
-          requestedByRole: "student",
-          studentId,
-          cancelReason: "Cancelled by student prior to food preparation",
-        }),
-      });
+      const res = demoUpdateOrderStatus(
+        orderId,
+        "cancelled",
+        "student",
+        studentId,
+        "Cancelled by student prior to food preparation"
+      );
 
-      const data = await res.json();
-      if (data.success) {
-        await refreshUser();
-        await fetchOrders();
+      if (res.success) {
+        refreshUser();
+        fetchOrders();
       } else {
-        alert(data.message || "Could not cancel order.");
+        alert(res.message || "Could not cancel order.");
       }
     } catch (err) {
       console.error("Cancel order error:", err);
-      alert("Error contacting server to cancel order.");
+      alert("Error cancelling order.");
     } finally {
       setCancellingOrderId(null);
     }
   };
 
   // Quick Wallet Top-up
-  const handleTopUp = async () => {
+  const handleTopUp = () => {
     if (!user) return;
     setTopUpLoading(true);
     try {
-      const res = await fetch("/api/auth/wallet", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: user.id, amount: 200 }),
-      });
-      const data = await res.json();
-      if (data.success) {
+      const res = demoTopUpWallet(user.id, 200);
+      if (res.success) {
         setTopUpMessage("+₹200 added to your student wallet!");
-        await refreshUser();
+        refreshUser();
         setTimeout(() => setTopUpMessage(null), 3500);
       }
     } catch (err) {
@@ -288,7 +284,6 @@ export default function StudentDashboardPage() {
     return matchesCat && matchesQuery;
   });
 
-  // Status helper badge
   const getStatusBadge = (status: Order["status"]) => {
     switch (status) {
       case "pending":

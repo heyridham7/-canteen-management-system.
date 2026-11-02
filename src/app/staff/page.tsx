@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/context/AuthContext";
 import { Order, OrderStatus } from "@/types";
+import { demoGetOrders, demoUpdateOrderStatus } from "@/lib/demoStorage";
 import {
   ChefHat,
   Clock,
@@ -35,14 +36,11 @@ export default function StaffKitchenPage() {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  // Fetch orders from shared API
-  const fetchOrders = useCallback(async () => {
+  // Fetch orders from demo storage
+  const fetchOrders = useCallback(() => {
     try {
-      const res = await fetch("/api/orders");
-      const data = await res.json();
-      if (data.success && Array.isArray(data.orders)) {
-        setOrders(data.orders);
-      }
+      const allOrders = demoGetOrders();
+      setOrders(allOrders);
     } catch (err) {
       console.error("Staff orders fetch error:", err);
     } finally {
@@ -52,33 +50,37 @@ export default function StaffKitchenPage() {
 
   useEffect(() => {
     fetchOrders();
+
+    const handleSync = () => {
+      fetchOrders();
+    };
+
+    window.addEventListener("campusbite_demo_sync", handleSync);
+    window.addEventListener("storage", handleSync);
+
     const interval = setInterval(fetchOrders, 3000); // 3-second live kitchen poll
-    return () => clearInterval(interval);
+
+    return () => {
+      window.removeEventListener("campusbite_demo_sync", handleSync);
+      window.removeEventListener("storage", handleSync);
+      clearInterval(interval);
+    };
   }, [fetchOrders]);
 
   // Update order status workflow
-  const handleUpdateStatus = async (orderId: string, nextStatus: OrderStatus) => {
+  const handleUpdateStatus = (orderId: string, nextStatus: OrderStatus) => {
     setUpdatingId(orderId);
     setActionError(null);
     try {
-      const res = await fetch(`/api/orders/${orderId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          nextStatus,
-          requestedByRole: "staff",
-        }),
-      });
-
-      const data = await res.json();
-      if (data.success) {
-        await fetchOrders();
+      const res = demoUpdateOrderStatus(orderId, nextStatus, "staff");
+      if (res.success) {
+        fetchOrders();
       } else {
-        setActionError(data.message || "Failed to update order status.");
+        setActionError(res.message || "Failed to update order status.");
       }
     } catch (err) {
       console.error("Status transition error:", err);
-      setActionError("Network error while updating status.");
+      setActionError("Error while updating status.");
     } finally {
       setUpdatingId(null);
     }

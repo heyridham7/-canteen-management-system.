@@ -5,6 +5,21 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/context/AuthContext";
 import { MenuItem, InventoryItem, User, Order, DashboardStats } from "@/types";
 import {
+  demoGetStats,
+  demoGetMenu,
+  demoAddMenuItem,
+  demoUpdateMenuItem,
+  demoToggleMenuAvailability,
+  demoDeactivateMenuItem,
+  demoGetOrders,
+  demoGetInventory,
+  demoAddInventory,
+  demoUpdateInventory,
+  demoGetUsers,
+  demoToggleUserStatus,
+  demoToggleCanteenOnline,
+} from "@/lib/demoStorage";
+import {
   TrendingUp,
   Users,
   UtensilsCrossed,
@@ -76,29 +91,19 @@ export default function AdminDashboardPage() {
   const [togglingCanteen, setTogglingCanteen] = useState(false);
 
   // Fetch all admin data
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(() => {
     try {
-      const [statsRes, menuRes, invRes, usersRes, ordersRes] = await Promise.all([
-        fetch("/api/admin/stats"),
-        fetch("/api/menu?all=true"),
-        fetch("/api/inventory"),
-        fetch("/api/users"),
-        fetch("/api/orders"),
-      ]);
+      const statsData = demoGetStats();
+      const menuData = demoGetMenu(undefined, undefined, true);
+      const invData = demoGetInventory();
+      const usersData = demoGetUsers();
+      const ordersData = demoGetOrders();
 
-      const [statsData, menuData, invData, usersData, ordersData] = await Promise.all([
-        statsRes.json(),
-        menuRes.json(),
-        invRes.json(),
-        usersRes.json(),
-        ordersRes.json(),
-      ]);
-
-      if (statsData.success) setStats(statsData.stats);
-      if (menuData.success) setMenuItems(menuData.items);
-      if (invData.success) setInventory(invData.inventory);
-      if (usersData.success) setUsersList(usersData.users);
-      if (ordersData.success) setOrdersList(ordersData.orders);
+      setStats(statsData);
+      setMenuItems(menuData.items);
+      setInventory(invData);
+      setUsersList(usersData);
+      setOrdersList(ordersData);
     } catch (err) {
       console.error("Admin fetch error:", err);
     } finally {
@@ -108,22 +113,27 @@ export default function AdminDashboardPage() {
 
   useEffect(() => {
     fetchData();
+
+    const handleSync = () => {
+      fetchData();
+    };
+
+    window.addEventListener("campusbite_demo_sync", handleSync);
+    window.addEventListener("storage", handleSync);
+
+    return () => {
+      window.removeEventListener("campusbite_demo_sync", handleSync);
+      window.removeEventListener("storage", handleSync);
+    };
   }, [fetchData]);
 
   // Toggle Canteen Online status
-  const handleToggleCanteen = async () => {
+  const handleToggleCanteen = () => {
     if (!stats) return;
     setTogglingCanteen(true);
     try {
-      const res = await fetch("/api/admin/stats", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ canteenOnline: !stats.canteenOnline }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setStats((prev) => (prev ? { ...prev, canteenOnline: data.canteenOnline } : null));
-      }
+      const newStatus = demoToggleCanteenOnline(!stats.canteenOnline);
+      setStats((prev) => (prev ? { ...prev, canteenOnline: newStatus } : null));
     } catch (err) {
       console.error("Toggle canteen error:", err);
     } finally {
@@ -132,17 +142,14 @@ export default function AdminDashboardPage() {
   };
 
   // Toggle item availability
-  const handleToggleAvailability = async (item: MenuItem) => {
+  const handleToggleAvailability = (item: MenuItem) => {
     try {
-      const res = await fetch(`/api/menu/${item.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isAvailable: !item.isAvailable }),
-      });
-      if (res.ok) {
+      const success = demoToggleMenuAvailability(item.id, !item.isAvailable);
+      if (success) {
         setMenuItems((prev) =>
           prev.map((m) => (m.id === item.id ? { ...m, isAvailable: !m.isAvailable } : m))
         );
+        fetchData();
       }
     } catch (err) {
       console.error("Availability toggle error:", err);
@@ -150,16 +157,17 @@ export default function AdminDashboardPage() {
   };
 
   // Soft delete / deactivate menu item
-  const handleDeactivateItem = async (itemId: string) => {
+  const handleDeactivateItem = (itemId: string) => {
     if (!confirm("Deactivate this dish? It will be hidden from students, but historical order records remain intact.")) {
       return;
     }
     try {
-      const res = await fetch(`/api/menu/${itemId}`, { method: "DELETE" });
-      if (res.ok) {
+      const success = demoDeactivateMenuItem(itemId);
+      if (success) {
         setMenuItems((prev) =>
           prev.map((m) => (m.id === itemId ? { ...m, isActive: false } : m))
         );
+        fetchData();
       }
     } catch (err) {
       console.error("Deactivate error:", err);
@@ -167,51 +175,37 @@ export default function AdminDashboardPage() {
   };
 
   // Save / Update Menu Item
-  const handleSaveMenuItem = async (e: React.FormEvent) => {
+  const handleSaveMenuItem = (e: React.FormEvent) => {
     e.preventDefault();
     setMenuFormSaving(true);
     try {
       if (editingMenuItem) {
         // Update
-        const res = await fetch(`/api/menu/${editingMenuItem.id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: menuFormName,
-            category: menuFormCategory,
-            price: Number(menuFormPrice),
-            preparationTime: menuFormPrepTime,
-            calories: menuFormCalories,
-            isVeg: menuFormIsVeg,
-            image: menuFormImage || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&q=80",
-            description: menuFormDescription,
-          }),
+        demoUpdateMenuItem(editingMenuItem.id, {
+          name: menuFormName,
+          category: menuFormCategory,
+          price: Number(menuFormPrice),
+          preparationTime: menuFormPrepTime,
+          calories: menuFormCalories,
+          isVeg: menuFormIsVeg,
+          image: menuFormImage || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&q=80",
+          description: menuFormDescription,
         });
-        if (res.ok) {
-          setShowMenuModal(false);
-          await fetchData();
-        }
       } else {
         // Create
-        const res = await fetch("/api/menu", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: menuFormName,
-            category: menuFormCategory,
-            price: Number(menuFormPrice),
-            preparationTime: menuFormPrepTime,
-            calories: menuFormCalories,
-            isVeg: menuFormIsVeg,
-            image: menuFormImage || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&q=80",
-            description: menuFormDescription,
-          }),
+        demoAddMenuItem({
+          name: menuFormName,
+          category: menuFormCategory,
+          price: Number(menuFormPrice),
+          preparationTime: menuFormPrepTime,
+          calories: menuFormCalories,
+          isVeg: menuFormIsVeg,
+          image: menuFormImage || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&q=80",
+          description: menuFormDescription,
         });
-        if (res.ok) {
-          setShowMenuModal(false);
-          await fetchData();
-        }
       }
+      setShowMenuModal(false);
+      fetchData();
     } catch (err) {
       console.error("Save menu item error:", err);
     } finally {
@@ -246,19 +240,13 @@ export default function AdminDashboardPage() {
   };
 
   // Restock inventory
-  const handleRestock = async () => {
+  const handleRestock = () => {
     if (!selectedInvItem) return;
     setInvSaving(true);
     try {
-      const res = await fetch(`/api/inventory/${selectedInvItem.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ restockQuantity: Number(restockAmount) }),
-      });
-      if (res.ok) {
-        setShowInvModal(false);
-        await fetchData();
-      }
+      demoUpdateInventory(selectedInvItem.id, Number(restockAmount));
+      setShowInvModal(false);
+      fetchData();
     } catch (err) {
       console.error("Restock error:", err);
     } finally {
@@ -267,25 +255,19 @@ export default function AdminDashboardPage() {
   };
 
   // Add new inventory item
-  const handleAddInventory = async (e: React.FormEvent) => {
+  const handleAddInventory = (e: React.FormEvent) => {
     e.preventDefault();
     setInvSaving(true);
     try {
-      const res = await fetch("/api/inventory", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          itemName: newInvName,
-          unit: newInvUnit,
-          currentStock: Number(newInvStock),
-          minThreshold: Number(newInvThreshold),
-        }),
+      demoAddInventory({
+        itemName: newInvName,
+        unit: newInvUnit,
+        currentStock: Number(newInvStock),
+        minThreshold: Number(newInvThreshold),
       });
-      if (res.ok) {
-        setShowInvModal(false);
-        setNewInvName("");
-        await fetchData();
-      }
+      setShowInvModal(false);
+      setNewInvName("");
+      fetchData();
     } catch (err) {
       console.error("Add inventory error:", err);
     } finally {
@@ -294,18 +276,15 @@ export default function AdminDashboardPage() {
   };
 
   // Toggle user active / deactivated status
-  const handleToggleUserStatus = async (userItem: User) => {
+  const handleToggleUserStatus = (userItem: User) => {
     const nextStatus = userItem.status === "active" ? "deactivated" : "active";
     try {
-      const res = await fetch(`/api/users/${userItem.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: nextStatus }),
-      });
-      if (res.ok) {
+      const success = demoToggleUserStatus(userItem.id, nextStatus);
+      if (success) {
         setUsersList((prev) =>
           prev.map((u) => (u.id === userItem.id ? { ...u, status: nextStatus } : u))
         );
+        fetchData();
       }
     } catch (err) {
       console.error("User toggle error:", err);

@@ -37,14 +37,41 @@ CampusBite CMS solves the common bottlenecks of campus dining (long queues, misp
 
 | Layer | Technology |
 |---|---|
-| **Framework** | [Next.js 16](https://nextjs.org/) (App Router, Turbopack) |
+| **Framework** | [Next.js 16](https://nextjs.org/) (App Router, Turbopack, Static Export) |
 | **Frontend UI** | [React 19](https://react.dev/), [TypeScript](https://www.typescriptlang.org/) |
 | **Styling** | [Tailwind CSS v4](https://tailwindcss.com/) with dedicated CLI build pipeline |
 | **Icons** | [Lucide React](https://lucide.dev/) |
-| **Backend & APIs** | Next.js Route Handlers (`src/app/api/*`) |
-| **Database** | File-backed atomic JSON database (`data/canteen_db.json`) with persistent ACID operations |
-| **Security** | Node.js `crypto.scryptSync` password hashing with cryptographic salt |
-| **Architecture** | Reusable component hierarchy, role-based access control (RBAC), and shared single source of truth |
+| **Client Demo Engine** | Browser `localStorage` storage layer (`src/lib/demoStorage.ts`) with cross-tab live event bus |
+| **Full-Stack Architecture** | Preserved Next.js Route Handlers (`backend/api/*`) & atomic file database (`src/lib/db.ts`) |
+| **CI/CD Deployment** | GitHub Actions (`.github/workflows/deploy.yml`) to GitHub Pages |
+| **Architecture** | Reusable component hierarchy, role-based access control (RBAC), and shared state synchronization |
+
+---
+
+## 🌐 GitHub Pages Deployment & Demonstration Mode
+
+This project is prepared for zero-configuration, serverless demonstration via **GitHub Pages**, following the academic showcase pattern:
+
+### 1. Static Export Configuration
+- Next.js is configured for static site export (`output: "export"`) in [`next.config.ts`](file:///Users/ridhamp/Desktop/SE_lab/next.config.ts).
+- Configured repository base path and asset prefix: `/-canteen-management-system`.
+- In production / CI builds (`GITHUB_PAGES=true`), Next.js automatically prefixes all scripts, stylesheets, and navigation links.
+
+### 2. Client-Side Browser Storage (`localStorage`)
+- Because static hosting on GitHub Pages does not run a server runtime or backend Node.js APIs, the interactive demonstration is powered by [`src/lib/demoStorage.ts`](file:///Users/ridhamp/Desktop/SE_lab/src/lib/demoStorage.ts).
+- Supports demo registration/login, menu browsing, cart checkout, token generation, live kitchen order lifecycle transitions, inventory updates, and admin menu management directly in the browser.
+- Uses `window.dispatchEvent` with custom events (`campusbite_demo_sync`) and storage listeners to ensure live synchronization across multiple tabs simultaneously (e.g. Student tab in one window, Kitchen Staff in another).
+
+### 3. Preserved Full-Stack Backend Architecture
+- The complete Node.js/Next.js Route Handlers and file-backed database engine are preserved in [`backend/api/`](file:///Users/ridhamp/Desktop/SE_lab/backend/api/) and [`src/lib/db.ts`](file:///Users/ridhamp/Desktop/SE_lab/src/lib/db.ts) for full-stack Node.js server deployment or local evaluation.
+- Note for evaluation: On GitHub Pages, data persists in the evaluator's browser `localStorage`; no external database or backend server is running in GitHub Pages static hosting.
+
+### 4. GitHub Repository Settings for Deployment
+To enable deployment on GitHub:
+1. Navigate to your repository on GitHub.
+2. Go to **Settings** ➔ **Pages**.
+3. Under **Build and deployment** ➔ **Source**, select **GitHub Actions**.
+4. Pushing to `main` will automatically trigger the workflow in [`.github/workflows/deploy.yml`](file:///Users/ridhamp/Desktop/SE_lab/.github/workflows/deploy.yml), building the static export with Node.js 22 and deploying to `https://<username>.github.io/-canteen-management-system/`.
 
 ---
 
@@ -52,8 +79,19 @@ CampusBite CMS solves the common bottlenecks of campus dining (long queues, misp
 
 ```text
 SE_lab/
+├── .github/
+│   └── workflows/
+│       └── deploy.yml          # GitHub Actions workflow for automated Pages deployment
+├── backend/
+│   └── api/                    # Preserved full-stack Route Handlers (for Node.js server deployment)
+│       ├── auth/
+│       ├── menu/
+│       ├── orders/
+│       ├── inventory/
+│       ├── users/
+│       └── admin/
 ├── data/
-│   └── canteen_db.json         # Shared persistent database file (auto-initialized)
+│   └── canteen_db.json         # Shared persistent database file (full-stack mode)
 ├── public/                     # Static assets & icons
 ├── src/
 │   ├── app/
@@ -65,26 +103,7 @@ SE_lab/
 │   │   ├── register/page.tsx   # Student registration (with ₹500 welcome credit grant)
 │   │   ├── student/page.tsx    # Complete student dining dashboard
 │   │   ├── staff/page.tsx      # Staff kitchen dispatch terminal
-│   │   ├── admin/page.tsx      # Administrator console & inventory manager
-│   │   └── api/                # Backend API route handlers
-│   │       ├── auth/
-│   │       │   ├── login/route.ts
-│   │       │   ├── register/route.ts
-│   │       │   └── wallet/route.ts
-│   │       ├── menu/
-│   │       │   ├── route.ts
-│   │       │   └── [id]/route.ts
-│   │       ├── orders/
-│   │       │   ├── route.ts
-│   │       │   └── [id]/route.ts
-│   │       ├── inventory/
-│   │       │   ├── route.ts
-│   │       │   └── [id]/route.ts
-│   │       ├── users/
-│   │       │   ├── route.ts
-│   │       │   └── [id]/route.ts
-│   │       └── admin/
-│   │           └── stats/route.ts
+│   │   └── admin/page.tsx      # Administrator console & inventory manager
 │   ├── components/
 │   │   ├── layout/
 │   │   │   ├── Navbar.tsx           # Public sticky navbar with mobile drawer
@@ -96,11 +115,13 @@ SE_lab/
 │   │       ├── FeaturesSection.tsx
 │   │       └── HowItWorksSection.tsx
 │   ├── context/
-│   │   └── AuthContext.tsx          # Client auth context synchronized with backend
+│   │   └── AuthContext.tsx          # Client auth context synchronized with storage
 │   ├── lib/
-│   │   └── db.ts                    # Database engine, schema types, seed data & crypto
+│   │   ├── demoStorage.ts           # Browser localStorage demo database engine (GitHub Pages)
+│   │   └── db.ts                    # Backend database engine & crypto (full-stack mode)
 │   └── types/
 │       └── index.ts                 # Shared TypeScript models
+├── next.config.ts              # Static export & repository basePath configuration
 ├── package.json
 └── README.md
 ```

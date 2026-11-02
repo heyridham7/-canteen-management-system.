@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { User, UserRole } from "@/types";
+import { demoLogin, demoRegister, demoGetUsers } from "@/lib/demoStorage";
 
 interface AuthContextType {
   user: User | null;
@@ -66,14 +67,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const refreshUser = useCallback(async () => {
     if (!user) return;
     try {
-      const res = await fetch("/api/users");
-      const data = await res.json();
-      if (data.success && Array.isArray(data.users)) {
-        const current = data.users.find((u: User) => u.id === user.id);
-        if (current) {
-          setUser(current);
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
-        }
+      const allUsers = demoGetUsers();
+      const current = allUsers.find((u: User) => u.id === user.id);
+      if (current) {
+        setUser(current);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
       }
     } catch (err) {
       console.error("Failed to refresh user profile:", err);
@@ -86,24 +84,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     role?: UserRole
   ): Promise<{ success: boolean; message: string }> => {
     try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, role }),
-      });
-
-      const data = await res.json();
-      if (data.success && data.user) {
-        setUser(data.user);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(data.user));
-        router.push(`/${data.user.role}`);
-        return { success: true, message: data.message };
+      const res = demoLogin(email, password, role);
+      if (res.success && res.user) {
+        setUser(res.user);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(res.user));
+        router.push(`/${res.user.role}`);
+        return { success: true, message: res.message };
       } else {
-        return { success: false, message: data.message || "Login failed." };
+        return { success: false, message: res.message || "Login failed." };
       }
     } catch (err) {
-      console.error("Login fetch error:", err);
-      return { success: false, message: "Network error. Please try again." };
+      console.error("Login demo error:", err);
+      return { success: false, message: "Error during login." };
     }
   };
 
@@ -116,24 +108,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     yearOfStudy?: string;
   }): Promise<{ success: boolean; message: string }> => {
     try {
-      const res = await fetch("/api/auth/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(userData),
-      });
-
-      const data = await res.json();
-      if (data.success && data.user) {
-        setUser(data.user);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(data.user));
+      const res = demoRegister(userData);
+      if (res.success && res.user) {
+        setUser(res.user);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(res.user));
         router.push("/student");
-        return { success: true, message: data.message };
+        return { success: true, message: res.message };
       } else {
-        return { success: false, message: data.message || "Registration failed." };
+        return { success: false, message: res.message || "Registration failed." };
       }
     } catch (err) {
-      console.error("Register fetch error:", err);
-      return { success: false, message: "Network error. Please try again." };
+      console.error("Register demo error:", err);
+      return { success: false, message: "Error during registration." };
     }
   };
 
