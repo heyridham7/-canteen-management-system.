@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   UtensilsCrossed,
   LayoutDashboard,
@@ -25,6 +25,7 @@ import {
   ChevronRight,
   ExternalLink,
   Sparkles,
+  Package,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { UserRole } from "@/types";
@@ -43,8 +44,21 @@ export function DashboardLayout({
   subtitle,
 }: DashboardLayoutProps) {
   const pathname = usePathname();
-  const { user, switchRole, logout } = useAuth();
+  const router = useRouter();
+  const { user, isLoading, switchRole, logout } = useAuth();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+
+  // Role-Based Access Control (RBAC) Guard
+  useEffect(() => {
+    if (!isLoading) {
+      if (!user) {
+        router.push("/login");
+      } else if (user.role !== activeRole) {
+        // Enforce role boundary: redirect to their authorized portal
+        router.push(`/${user.role}`);
+      }
+    }
+  }, [user, isLoading, activeRole, router]);
 
   // Dynamic navigation links based on role
   const getNavLinks = () => {
@@ -52,25 +66,23 @@ export function DashboardLayout({
       case "student":
         return [
           { label: "Dashboard", href: "/student", icon: LayoutDashboard },
-          { label: "Canteen Menu", href: "/student#menu", icon: Utensils, badge: "Live" },
-          { label: "My Tokens", href: "/student#tokens", icon: Ticket, badge: "2 Active" },
-          { label: "Past Orders", href: "/student#orders", icon: Clock },
-          { label: "Student Wallet", href: "/student#wallet", icon: Wallet },
+          { label: "Live Menu & Cart", href: "/student", icon: Utensils, badge: "Live" },
+          { label: "Tokens & Status", href: "/student", icon: Ticket },
+          { label: "Order History", href: "/student", icon: Clock },
         ];
       case "staff":
         return [
           { label: "Kitchen Counter", href: "/staff", icon: ChefHat },
-          { label: "Live Order Queue", href: "/staff#queue", icon: ListOrdered, badge: "6 Pending" },
-          { label: "Token Dispatch", href: "/staff#dispatch", icon: CheckCircle2 },
-          { label: "Menu Stock Status", href: "/staff#menu-stock", icon: Utensils },
+          { label: "Live Order Queue", href: "/staff", icon: ListOrdered, badge: "Active" },
+          { label: "Dispatch Terminal", href: "/staff", icon: CheckCircle2 },
         ];
       case "admin":
         return [
           { label: "Executive Overview", href: "/admin", icon: BarChart3 },
-          { label: "Canteen Operations", href: "/admin#operations", icon: LayoutDashboard },
-          { label: "User Management", href: "/admin#users", icon: Users, badge: "3 Roles" },
-          { label: "Menu & Categories", href: "/admin#menu", icon: Utensils },
-          { label: "System Settings", href: "/admin#settings", icon: Settings },
+          { label: "Menu Master", href: "/admin", icon: Utensils },
+          { label: "Inventory & Stock", href: "/admin", icon: Package },
+          { label: "User Accounts", href: "/admin", icon: Users },
+          { label: "All Orders Audit", href: "/admin", icon: Ticket },
         ];
     }
   };
@@ -129,12 +141,12 @@ export function DashboardLayout({
         <div className={`mt-4 px-3 py-2 rounded-lg border text-xs font-medium flex items-center justify-between ${roleMeta.bg}`}>
           <div className="flex items-center gap-2">
             <span className={`w-2 h-2 rounded-full ${roleMeta.dot} animate-pulse`} />
-            <span className="flex items-center gap-1.5">
+            <span className="flex items-center gap-1.5 font-bold">
               <RoleIcon className="w-3.5 h-3.5" />
               {roleMeta.label}
             </span>
           </div>
-          <span className="text-[10px] uppercase font-bold tracking-wider opacity-75">Active</span>
+          <span className="text-[10px] uppercase font-bold tracking-wider opacity-75">RBAC</span>
         </div>
       </div>
 
@@ -143,9 +155,9 @@ export function DashboardLayout({
         <div className="px-3 pb-2 text-[11px] font-bold uppercase tracking-wider text-slate-400">
           Navigation
         </div>
-        {navLinks.map((item) => {
+        {navLinks.map((item, idx) => {
           const Icon = item.icon;
-          const isActive = pathname === item.href || (item.href !== `/${activeRole}` && pathname.startsWith(item.href));
+          const isActive = idx === 0;
           return (
             <Link
               key={item.label}
@@ -174,7 +186,7 @@ export function DashboardLayout({
           );
         })}
 
-        {/* Role Switcher Section in Sidebar */}
+        {/* Quick Role Switcher (For seamless academic testing) */}
         <div className="pt-6">
           <div className="px-3 pb-2 text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
             <span>Demo Role Switcher</span>
@@ -189,11 +201,11 @@ export function DashboardLayout({
               return (
                 <button
                   key={r}
-                  onClick={() => {
-                    switchRole(r);
+                  onClick={async () => {
+                    await switchRole(r);
                     setMobileSidebarOpen(false);
                   }}
-                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
                     isCurrent
                       ? "bg-slate-800 text-orange-400 border border-orange-500/30 shadow-sm"
                       : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/40"
@@ -225,7 +237,7 @@ export function DashboardLayout({
           </div>
           <button
             onClick={logout}
-            className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition-colors"
+            className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
             title="Log out"
           >
             <LogOut className="w-4 h-4" />
@@ -250,7 +262,7 @@ export function DashboardLayout({
         <SidebarContent />
       </aside>
 
-      {/* Mobile Drawer Backdrop and Sidebar */}
+      {/* Mobile Drawer */}
       {mobileSidebarOpen && (
         <div className="fixed inset-0 z-50 lg:hidden flex">
           <div
@@ -278,7 +290,7 @@ export function DashboardLayout({
             {/* Mobile Hamburger */}
             <button
               onClick={() => setMobileSidebarOpen(true)}
-              className="p-2 -ml-2 rounded-lg text-slate-600 hover:bg-slate-100 lg:hidden"
+              className="p-2 -ml-2 rounded-lg text-slate-600 hover:bg-slate-100 lg:hidden cursor-pointer"
               aria-label="Open sidebar"
             >
               <Menu className="w-5 h-5" />
@@ -307,7 +319,7 @@ export function DashboardLayout({
                   <button
                     key={r}
                     onClick={() => switchRole(r)}
-                    className={`px-2.5 py-1 text-xs font-semibold rounded-lg capitalize transition-all ${
+                    className={`px-2.5 py-1 text-xs font-semibold rounded-lg capitalize transition-all cursor-pointer ${
                       isCurrent
                         ? "bg-white text-orange-600 shadow-xs border border-slate-200/80"
                         : "text-slate-600 hover:text-slate-900"
@@ -343,7 +355,7 @@ export function DashboardLayout({
           <div className="bg-slate-100/60 border-b border-slate-200/80 px-4 sm:px-6 lg:px-8 py-2 text-xs text-slate-600 flex items-center justify-between">
             <p>{subtitle}</p>
             <span className="text-[11px] font-medium text-orange-600 bg-orange-50 px-2 py-0.5 rounded border border-orange-200/60 hidden sm:inline-block">
-              Academic SE Lab Preview
+              Software Engineering Academic Project
             </span>
           </div>
         )}

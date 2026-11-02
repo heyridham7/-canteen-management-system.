@@ -14,6 +14,7 @@ import {
   AlertCircle,
   CheckCircle2,
   Sparkles,
+  Loader2,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { Navbar } from "@/components/layout/Navbar";
@@ -43,9 +44,10 @@ export default function RegisterPage() {
   ];
 
   const handlePreFillDemo = () => {
+    const randomSuffix = Math.floor(100 + Math.random() * 900);
     setFullName("Rohan Deshmukh");
-    setEmail("rohan.deshmukh24@campus.edu");
-    setStudentId("2024CS119");
+    setEmail(`rohan.cs${randomSuffix}@campus.edu`);
+    setStudentId(`2024CS${randomSuffix}`);
     setDepartment("Computer Science & Engineering");
     setYearOfStudy("3rd Year");
     setPassword("campus123");
@@ -53,7 +55,7 @@ export default function RegisterPage() {
     setError(null);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
@@ -79,15 +81,19 @@ export default function RegisterPage() {
     }
 
     setIsSubmitting(true);
-    setTimeout(() => {
-      register({
-        name: fullName,
-        email,
-        studentId,
-        department,
-      });
-      setIsSubmitting(false);
-    }, 400);
+    const res = await register({
+      name: fullName,
+      email,
+      password,
+      studentId,
+      department,
+      yearOfStudy,
+    });
+    setIsSubmitting(false);
+
+    if (!res.success) {
+      setError(res.message);
+    }
   };
 
   return (
@@ -109,7 +115,7 @@ export default function RegisterPage() {
               Create Your Campus Account
             </h1>
             <p className="text-sm text-slate-500">
-              Register to access student meal pre-ordering and smart token pickup
+              New students receive an automatic ₹500 welcome credit in their campus wallet
             </p>
           </div>
 
@@ -117,12 +123,12 @@ export default function RegisterPage() {
           <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
             <div className="flex items-center gap-2 text-xs text-slate-600">
               <Sparkles className="w-4 h-4 text-orange-500" />
-              <span className="font-medium">Testing this demo?</span>
+              <span className="font-medium">Testing registration?</span>
             </div>
             <button
               type="button"
               onClick={handlePreFillDemo}
-              className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-orange-50 text-orange-700 border border-orange-200 hover:bg-orange-100 transition-colors"
+              className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-orange-50 text-orange-700 border border-orange-200 hover:bg-orange-100 transition-colors cursor-pointer"
             >
               Autofill Sample Student
             </button>
@@ -132,7 +138,7 @@ export default function RegisterPage() {
           <div className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 shadow-sm">
             <form onSubmit={handleSubmit} className="space-y-4">
               {error && (
-                <div className="p-3 rounded-xl bg-red-50 border border-red-200 flex items-center gap-2 text-xs text-red-700">
+                <div className="p-3 rounded-xl bg-red-50 border border-red-200 flex items-center gap-2 text-xs text-red-700 animate-fade-in">
                   <AlertCircle className="w-4 h-4 shrink-0" />
                   <span>{error}</span>
                 </div>
@@ -297,7 +303,7 @@ export default function RegisterPage() {
               <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-[11px] text-slate-500 flex items-start gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
                 <span>
-                  By registering, your demo student account will be persisted in browser LocalStorage. You can toggle roles anytime using the Topbar Demo Switcher.
+                  Your student record is securely registered in the central system database. You will be automatically redirected to your dining portal.
                 </span>
               </div>
 
@@ -307,8 +313,17 @@ export default function RegisterPage() {
                 disabled={isSubmitting}
                 className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-semibold text-white bg-orange-500 hover:bg-orange-600 shadow-md shadow-orange-500/30 transition-all hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-70 cursor-pointer"
               >
-                <span>{isSubmitting ? "Creating Student Account..." : "Complete Registration"}</span>
-                <ArrowRight className="w-4 h-4" />
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Registering Student Account...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Complete Registration</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
               </button>
             </form>
 

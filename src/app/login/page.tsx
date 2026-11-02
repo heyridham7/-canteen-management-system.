@@ -10,11 +10,11 @@ import {
   GraduationCap,
   ChefHat,
   ShieldCheck,
-  Check,
   AlertCircle,
   Sparkles,
+  Loader2,
 } from "lucide-react";
-import { useAuth, DEMO_USERS } from "@/context/AuthContext";
+import { useAuth, DEMO_CREDENTIALS } from "@/context/AuthContext";
 import { UserRole } from "@/types";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
@@ -22,8 +22,8 @@ import { Footer } from "@/components/layout/Footer";
 export default function LoginPage() {
   const { login } = useAuth();
   const [role, setRole] = useState<UserRole>("student");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState("aarav.cs24@campus.edu");
+  const [password, setPassword] = useState("campus123");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -32,43 +32,35 @@ export default function LoginPage() {
     label: string;
     sublabel: string;
     icon: React.ElementType;
-    badgeColor: string;
-    targetRoute: string;
   }[] = [
     {
       id: "student",
       label: "Student",
       sublabel: "Place orders & track tokens",
       icon: GraduationCap,
-      badgeColor: "text-blue-600 bg-blue-50 border-blue-200",
-      targetRoute: "/student",
     },
     {
       id: "staff",
       label: "Canteen Staff",
       sublabel: "Kitchen queue & dispatch",
       icon: ChefHat,
-      badgeColor: "text-amber-600 bg-amber-50 border-amber-200",
-      targetRoute: "/staff",
     },
     {
       id: "admin",
       label: "Administrator",
       sublabel: "Menu, users & oversight",
       icon: ShieldCheck,
-      badgeColor: "text-emerald-600 bg-emerald-50 border-emerald-200",
-      targetRoute: "/admin",
     },
   ];
 
   const handleQuickDemoFill = (selectedRole: UserRole) => {
     setRole(selectedRole);
-    setEmail(DEMO_USERS[selectedRole].email);
-    setPassword("campus123");
+    setEmail(DEMO_CREDENTIALS[selectedRole].email);
+    setPassword(DEMO_CREDENTIALS[selectedRole].pass);
     setError(null);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
@@ -82,11 +74,12 @@ export default function LoginPage() {
     }
 
     setIsSubmitting(true);
-    // Simulate instantaneous local auth verification
-    setTimeout(() => {
-      login(email, role, DEMO_USERS[role]?.name);
-      setIsSubmitting(false);
-    }, 400);
+    const res = await login(email, password, role);
+    setIsSubmitting(false);
+
+    if (!res.success) {
+      setError(res.message);
+    }
   };
 
   return (
@@ -104,25 +97,26 @@ export default function LoginPage() {
               Sign In to CampusBite
             </h1>
             <p className="text-sm text-slate-500">
-              Select your role and authenticate to access your dashboard
+              Role-based authentication connected to shared backend
             </p>
           </div>
 
-          {/* Quick Demo Pre-fill Pill Bar (Great for academic evaluation) */}
+          {/* Quick Demo Pre-fill Pill Bar */}
           <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-xs space-y-2">
             <div className="flex items-center justify-between text-xs font-semibold text-slate-600 px-1">
               <span className="flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5 text-orange-500" />
-                Quick Demo Accounts (1-Click Fill)
+                Quick Demo Credentials (1-Click Fill)
               </span>
+              <span className="text-[10px] text-slate-400 font-mono">pwd: campus123</span>
             </div>
             <div className="grid grid-cols-3 gap-1.5">
               <button
                 type="button"
                 onClick={() => handleQuickDemoFill("student")}
-                className={`py-1.5 px-2 rounded-lg text-xs font-medium border text-center transition-all ${
-                  role === "student" && email === DEMO_USERS.student.email
-                    ? "bg-blue-50 border-blue-300 text-blue-700 font-semibold"
+                className={`py-1.5 px-2 rounded-lg text-xs font-medium border text-center transition-all cursor-pointer ${
+                  role === "student" && email === DEMO_CREDENTIALS.student.email
+                    ? "bg-blue-50 border-blue-300 text-blue-700 font-semibold shadow-xs"
                     : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
                 }`}
               >
@@ -131,9 +125,9 @@ export default function LoginPage() {
               <button
                 type="button"
                 onClick={() => handleQuickDemoFill("staff")}
-                className={`py-1.5 px-2 rounded-lg text-xs font-medium border text-center transition-all ${
-                  role === "staff" && email === DEMO_USERS.staff.email
-                    ? "bg-amber-50 border-amber-300 text-amber-700 font-semibold"
+                className={`py-1.5 px-2 rounded-lg text-xs font-medium border text-center transition-all cursor-pointer ${
+                  role === "staff" && email === DEMO_CREDENTIALS.staff.email
+                    ? "bg-amber-50 border-amber-300 text-amber-700 font-semibold shadow-xs"
                     : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
                 }`}
               >
@@ -142,9 +136,9 @@ export default function LoginPage() {
               <button
                 type="button"
                 onClick={() => handleQuickDemoFill("admin")}
-                className={`py-1.5 px-2 rounded-lg text-xs font-medium border text-center transition-all ${
-                  role === "admin" && email === DEMO_USERS.admin.email
-                    ? "bg-emerald-50 border-emerald-300 text-emerald-700 font-semibold"
+                className={`py-1.5 px-2 rounded-lg text-xs font-medium border text-center transition-all cursor-pointer ${
+                  role === "admin" && email === DEMO_CREDENTIALS.admin.email
+                    ? "bg-emerald-50 border-emerald-300 text-emerald-700 font-semibold shadow-xs"
                     : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
                 }`}
               >
@@ -171,10 +165,12 @@ export default function LoginPage() {
                         type="button"
                         onClick={() => {
                           setRole(opt.id);
-                          // Auto fill if field was empty
-                          if (!email) setEmail(DEMO_USERS[opt.id].email);
+                          if (!email || Object.values(DEMO_CREDENTIALS).some((c) => c.email === email)) {
+                            setEmail(DEMO_CREDENTIALS[opt.id].email);
+                            setPassword(DEMO_CREDENTIALS[opt.id].pass);
+                          }
                         }}
-                        className={`p-3 rounded-xl border flex flex-col items-center text-center transition-all ${
+                        className={`p-3 rounded-xl border flex flex-col items-center text-center transition-all cursor-pointer ${
                           isSelected
                             ? "bg-orange-50 border-orange-500 text-orange-900 shadow-xs ring-1 ring-orange-500"
                             : "bg-slate-50/60 border-slate-200 text-slate-600 hover:bg-slate-100/70"
@@ -190,7 +186,7 @@ export default function LoginPage() {
 
               {/* Error Alert */}
               {error && (
-                <div className="p-3 rounded-xl bg-red-50 border border-red-200 flex items-center gap-2 text-xs text-red-700">
+                <div className="p-3 rounded-xl bg-red-50 border border-red-200 flex items-center gap-2 text-xs text-red-700 animate-fade-in">
                   <AlertCircle className="w-4 h-4 shrink-0" />
                   <span>{error}</span>
                 </div>
@@ -223,9 +219,6 @@ export default function LoginPage() {
                   <label htmlFor="password" className="block text-xs font-semibold text-slate-700">
                     Password
                   </label>
-                  <span className="text-[11px] text-slate-400 hover:text-slate-600 cursor-pointer">
-                    Forgot password?
-                  </span>
                 </div>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
@@ -249,8 +242,17 @@ export default function LoginPage() {
                 disabled={isSubmitting}
                 className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-semibold text-white bg-orange-500 hover:bg-orange-600 shadow-md shadow-orange-500/30 transition-all hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-70 cursor-pointer"
               >
-                <span>{isSubmitting ? "Authenticating..." : `Sign In as ${role.toUpperCase()}`}</span>
-                <ArrowRight className="w-4 h-4" />
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Verifying Credentials...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Sign In as {role.toUpperCase()}</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
               </button>
             </form>
 
@@ -271,7 +273,7 @@ export default function LoginPage() {
           {/* Quick Info */}
           <div className="text-center">
             <p className="text-xs text-slate-400">
-              Academic Project • Role-Based Authentication with LocalStorage Demo Persistence
+              Academic Project • Real server-side authentication with cryptographic password hashing
             </p>
           </div>
         </div>
