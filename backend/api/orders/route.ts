@@ -32,7 +32,9 @@ export async function GET(request: Request) {
 
     // Sort newest first
     orders.sort(
-      (a, b) => new Date(b.orderedAt).getTime() - new Date(a.orderedAt).getTime()
+      (a, b) =>
+        new Date(b.orderedAt).getTime() -
+        new Date(a.orderedAt).getTime()
     );
 
     return NextResponse.json({
@@ -51,7 +53,14 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { studentId, studentEmail, studentName, department, items, paymentMethod } = body;
+    const {
+      studentId,
+      studentEmail,
+      studentName,
+      department,
+      items,
+      paymentMethod,
+    } = body;
 
     const db = readDB();
 
@@ -76,13 +85,17 @@ export async function POST(request: Request) {
 
     // Validate and price items from DB
     const validatedItems: DBOrderItem[] = [];
+    const inventoryRequirements = new Map<string, number>();
+
     let calculatedSubtotal = 0;
     let maxPrepMins = 4;
     let hasMeals = false;
     let hasBeveragesOnly = true;
 
     for (const cartItem of items) {
-      const dbItem = db.menuItems.find((m) => m.id === cartItem.menuItemId && m.isActive);
+      const dbItem = db.menuItems.find(
+        (m) => m.id === cartItem.menuItemId && m.isActive
+      );
 
       if (!dbItem) {
         return NextResponse.json(
@@ -104,14 +117,19 @@ export async function POST(request: Request) {
         );
       }
 
-      const qty = Math.max(1, Math.min(20, Number(cartItem.quantity) || 1));
+      const qty = Math.max(
+        1,
+        Math.min(20, Number(cartItem.quantity) || 1)
+      );
+
       calculatedSubtotal += dbItem.price * qty;
 
       if (dbItem.category === "Meals") hasMeals = true;
       if (dbItem.category !== "Beverages") hasBeveragesOnly = false;
 
-      // Extract prep minutes
+      // Extract preparation time
       const match = dbItem.preparationTime.match(/\d+/);
+
       if (match) {
         const mins = parseInt(match[0], 10);
         if (mins > maxPrepMins) maxPrepMins = mins;
@@ -125,37 +143,88 @@ export async function POST(request: Request) {
         isVeg: dbItem.isVeg,
       });
 
-      // If linked to inventory, decrement non-negative
+      // Track total inventory required
       if (dbItem.inventoryItemId) {
-        const inv = db.inventory.find((i) => i.id === dbItem.inventoryItemId);
-        if (inv && inv.currentStock > 0) {
-          inv.currentStock = Math.max(0, inv.currentStock - qty);
-        }
+        const currentRequired =
+          inventoryRequirements.get(dbItem.inventoryItemId) || 0;
+
+        inventoryRequirements.set(
+          dbItem.inventoryItemId,
+          currentRequired + qty
+        );
       }
     }
 
-    const subsidyDiscount = Math.round(calculatedSubtotal * 0.05); // 5% campus subsidy
+    // Validate inventory availability before processing payment
+    for (const [inventoryId, requiredQuantity] of inventoryRequirements) {
+      const inventoryItem = db.inventory.find(
+        (item) => item.id === inventoryId
+      );
+
+      if (!inventoryItem) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: "Linked inventory record not found.",
+          },
+          { status: 400 }
+        );
+      }
+
+      if (inventoryItem.currentStock < requiredQuantity) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: `Insufficient stock for ${inventoryItem.itemName}. Available: ${inventoryItem.currentStock}, Required: ${requiredQuantity}.`,
+          },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Deduct inventory only after all stock validations pass
+    for (const [inventoryId, requiredQuantity] of inventoryRequirements) {
+      const inventoryItem = db.inventory.find(
+        (item) => item.id === inventoryId
+      );
+
+      if (inventoryItem) {
+        inventoryItem.currentStock -= requiredQuantity;
+      }
+    }
+
+    const subsidyDiscount = Math.round(calculatedSubtotal * 0.05);
     const totalAmount = calculatedSubtotal - subsidyDiscount;
 
-    const chosenPaymentMethod = paymentMethod === "cash_at_counter" ? "cash_at_counter" : "wallet";
-    let paymentStatus: "paid" | "pending_counter_payment" = "pending_counter_payment";
+    const chosenPaymentMethod =
+      paymentMethod === "cash_at_counter"
+        ? "cash_at_counter"
+        : "wallet";
+
+    let paymentStatus: "paid" | "pending_counter_payment" =
+      "pending_counter_payment";
 
     // Handle student wallet debit
     if (chosenPaymentMethod === "wallet") {
       const userIndex = db.users.findIndex(
         (u) =>
           (studentId && u.studentId === studentId) ||
-          (studentEmail && u.email.toLowerCase() === studentEmail.toLowerCase())
+          (studentEmail &&
+            u.email.toLowerCase() === studentEmail.toLowerCase())
       );
 
       if (userIndex === -1) {
         return NextResponse.json(
-          { success: false, message: "Student account not found to debit wallet." },
+          {
+            success: false,
+            message: "Student account not found to debit wallet.",
+          },
           { status: 404 }
         );
       }
 
       const studentUser = db.users[userIndex];
+
       if (studentUser.walletBalance < totalAmount) {
         return NextResponse.json(
           {
@@ -166,25 +235,30 @@ export async function POST(request: Request) {
         );
       }
 
-      // Deduct atomically
       db.users[userIndex].walletBalance -= totalAmount;
       paymentStatus = "paid";
     }
 
-    // Generate unique Token number: e.g. A-110
+    // Generate unique token number
     const existingTokens = db.orders.map((o) => {
       const parts = o.tokenNumber.split("-");
       return parts.length === 2 ? parseInt(parts[1], 10) : 100;
     });
-    const maxNum = existingTokens.length > 0 ? Math.max(...existingTokens) : 107;
+
+    const maxNum =
+      existingTokens.length > 0 ? Math.max(...existingTokens) : 107;
+
     const nextTokenNum = maxNum >= 999 ? 101 : maxNum + 1;
     const tokenNumber = `A-${nextTokenNum}`;
 
-    // Generate Order ID
-    const orderId = `ORD-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+    // Generate order ID
+    const orderId = `ORD-${new Date().getFullYear()}-${Math.floor(
+      1000 + Math.random() * 9000
+    )}`;
 
     // Bay assignment
     let counterBay = "Bay 01 (Snacks & Grill)";
+
     if (hasBeveragesOnly) {
       counterBay = "Bay 03 (Beverages & Coolers)";
     } else if (hasMeals) {
@@ -192,6 +266,7 @@ export async function POST(request: Request) {
     }
 
     const now = new Date().toISOString();
+
     const newOrder: DBOrder = {
       id: orderId,
       tokenNumber,
@@ -222,8 +297,12 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error("Orders POST error:", error);
+
     return NextResponse.json(
-      { success: false, message: "Internal server error during order creation." },
+      {
+        success: false,
+        message: "Internal server error during order creation.",
+      },
       { status: 500 }
     );
   }
