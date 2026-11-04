@@ -5,7 +5,7 @@ const isGithubPages = process.env.GITHUB_PAGES === "true";
 const repoName = "/-canteen-management-system.";
 
 const nextConfig: NextConfig = {
-  output: "export",
+  output: isGithubPages ? "export" : undefined,
   basePath: isGithubPages ? repoName : "",
   assetPrefix: isGithubPages ? repoName : "",
   images: {
